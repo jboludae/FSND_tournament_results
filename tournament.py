@@ -4,40 +4,49 @@
 #
 
 import psycopg2
-import bleach
+from contextlib import contextmanager
 
+
+@contextmanager
+def connect_db():
+    conn = connect()
+    c = conn.cursor()
+    try:
+        yield c
+    except:
+        print "An unexpected error occurred"
+        raise
+    else:
+        conn.commit()
+    finally:
+        conn.close()
 
 def connect():
     """Connect to the PostgreSQL database.  Returns a database connection."""
-    return psycopg2.connect("dbname=tournament")
+    try:
+        return psycopg2.connect("dbname=tournament")
+    except:
+        print "Connection to tournament database failed"
 
 
 def deleteMatches():
     """Remove all the match records from the database."""
-    conn = connect()
-    c = conn.cursor()
-    c.execute("delete from matches")
-    conn.commit()
-    conn.close()
+    with connect_db() as c:
+        c.execute("delete from matches")
 
 
 def deletePlayers():
     """Remove all the player records from the database."""
-    conn = connect()
-    c = conn.cursor()
-    c.execute("delete from players")
-    conn.commit()
-    conn.close()
+    with connect_db() as c:
+        c.execute("delete from players")
 
 
 def countPlayers():
     """Returns the number of players currently registered."""
-    conn = connect()
-    c = conn.cursor()
-    c.execute("select count(*) from players")
-    results = c.fetchone()
-    conn.close()
-    return int(results[0])
+    with connect_db() as c:
+        c.execute("select count(*) from players")
+        results = c.fetchone()
+        return int(results[0])
 
 
 def registerPlayer(name):
@@ -49,13 +58,9 @@ def registerPlayer(name):
     Args:
       name: the player's full name (need not be unique).
     """
-    name = bleach.clean(name)
-    conn = connect()
-    c = conn.cursor()
-    # -->(%s ,0 ,0)",(name,)<-- this syntax is important to ' are inserted safely
-    c.execute("insert into players (name_player) values (%s)",(name,))
-    conn.commit()
-    conn.close()
+    with connect_db() as c:
+        # -->(%s ,0 ,0)",(name,)<-- this syntax is important to ' are inserted safely
+        c.execute("insert into players (name_player) values (%s)",(name,))
 
 
 def playerStandings():
@@ -71,13 +76,10 @@ def playerStandings():
         wins: the number of matches the player has won
         matches: the number of matches the player has played
     """
-    conn = connect()
-    c = conn.cursor()
-    c.execute("select * from ranking order by count_wins desc")
-    results = c.fetchall()
-    conn.commit()
-    conn.close()
-    return results
+    with connect_db() as c:
+        c.execute("select * from ranking order by count_wins desc")
+        results = c.fetchall()
+        return results
 
 
 def reportMatch(winner, loser):
@@ -87,13 +89,9 @@ def reportMatch(winner, loser):
       winner:  the id number of the player who won
       loser:  the id number of the player who lost
     """
-    conn = connect()
-    c = conn.cursor()
-    # Insert match into matches table
-    c.execute("insert into matches (winner, loser) values ({0},{1})".format(winner, loser))
-    conn.commit()
-
-    conn.close()
+    with connect_db() as c:
+        # Insert match into matches table
+       c.execute("insert into matches (winner, loser) values (%s,%s)",(winner, loser,))
  
  
 def swissPairings():
@@ -111,20 +109,18 @@ def swissPairings():
         id2: the second player's unique id
         name2: the second player's name
     """
-    conn = connect()
-    c = conn.cursor()
-    c.execute("select * from ranking order by count_wins desc")
-    players_list = c.fetchall()
-    num_games = len(players_list)/2
-    result = []
+    with connect_db() as c:
+        c.execute("select * from ranking order by count_wins desc")
+        players_list = c.fetchall()
+        num_games = len(players_list)/2
+        result = []
 
-    for game in range(num_games):
-        first_player_index = game*2
-        second_player_index = first_player_index + 1
-        first_player_tuple = players_list[first_player_index]
-        second_player_tuple = players_list[second_player_index]
-        result.append((first_player_tuple[0], first_player_tuple[1], second_player_tuple[0], second_player_tuple[1]))
-    conn.close()
-    return result
+        for game in range(num_games):
+            first_player_index = game*2
+            second_player_index = first_player_index + 1
+            first_player_tuple = players_list[first_player_index]
+            second_player_tuple = players_list[second_player_index]
+            result.append((first_player_tuple[0], first_player_tuple[1], second_player_tuple[0], second_player_tuple[1]))
+        return result
 
 
